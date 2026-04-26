@@ -1,4 +1,6 @@
 from __future__ import annotations
+import asyncio
+import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -13,6 +15,7 @@ from app.simulation.engine import simulate_shipment
 from app.simulation.scenarios import build_scenarios
 from app.simulation.cascade import cascade_affected_ids
 from app.simulation.routing import reroute as do_reroute
+from app.data.weather import weather_loop
 from app.websocket import ws_manager
 
 
@@ -24,7 +27,18 @@ def get_state() -> AppState:
 async def lifespan(app: FastAPI):
     if not _state.nodes:
         await _state.load_synthetic()
-    yield
+    task = None
+    if os.environ.get("CASCADE_DISABLE_WEATHER") != "1":
+        task = asyncio.create_task(weather_loop(_state, ws_manager))
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="Cascade Simulator", lifespan=lifespan)
