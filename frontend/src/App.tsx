@@ -1,122 +1,83 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState } from "react";
+import { GraphView } from "./components/GraphView";
+import { DisruptionModal } from "./components/DisruptionModal";
+import { ShipmentPanel } from "./components/ShipmentPanel";
+import { WeatherFeed } from "./components/WeatherFeed";
+import { useStore } from "./state/store";
+import { connectLive } from "./api/websocket";
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const {
+    loadGraph, runSimulation, addDisruption, removeDisruption,
+    nodes, shipments, cascadeAffected, selectedShipmentId, selectShipment,
+  } = useStore();
+  const [injectNodeId, setInjectNodeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      await loadGraph();
+      await runSimulation();
+    })();
+    const close = connectLive((ev) => {
+      if (ev.event === "disruption.added") {
+        addDisruption(ev.payload);
+        runSimulation();
+      } else if (ev.event === "disruption.removed") {
+        removeDisruption(ev.payload.id);
+        runSimulation();
+      }
+    });
+    return close;
+  }, [loadGraph, runSimulation, addDisruption, removeDisruption]);
+
+  const injectNode = nodes.find((n) => n.id === injectNodeId);
+  const selected = shipments.find((s) => s.id === selectedShipmentId);
+  const cascadeShipments = shipments.filter((s) => cascadeAffected.has(s.id));
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", height: "100vh" }}>
+      <GraphView onNodeClick={setInjectNodeId} />
+      <aside style={{
+        borderLeft: "1px solid #e5e7eb", overflow: "auto",
+        display: "flex", flexDirection: "column",
+      }}>
+        <div style={{ padding: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 16 }}>Cascade Simulator</h2>
+          <p style={{ fontSize: 11, color: "#64748b" }}>
+            Click a node on the map to inject a disruption. Select a cascade-affected shipment to see its probabilistic ETA.
           </p>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
 
-      <div className="ticks"></div>
+        <WeatherFeed />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        {cascadeShipments.length > 0 && (
+          <div style={{ padding: 12, borderTop: "1px solid #e5e7eb" }}>
+            <div style={{ fontSize: 11, color: "#991b1b", fontWeight: 600, marginBottom: 6 }}>
+              {cascadeShipments.length} shipments affected
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 140, overflow: "auto" }}>
+              {cascadeShipments.map((s) => (
+                <button key={s.id} onClick={() => selectShipment(s.id)}
+                  style={{
+                    textAlign: "left", padding: "4px 8px",
+                    border: "1px solid #e5e7eb", borderRadius: 4,
+                    background: selectedShipmentId === s.id ? "#eff6ff" : "white",
+                    fontSize: 11, cursor: "pointer",
+                  }}>
+                  {s.id} · {s.priority}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        {selected && <ShipmentPanel shipment={selected} />}
+      </aside>
+      <DisruptionModal
+        nodeId={injectNodeId}
+        nodeName={injectNode?.name ?? ""}
+        onClose={() => setInjectNodeId(null)}
+      />
+    </div>
+  );
 }
-
-export default App
