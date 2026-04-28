@@ -1,6 +1,5 @@
 ﻿FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt* pyproject.toml ./
+WORKDIR /backend
 RUN pip install fastapi uvicorn[standard] httpx pydantic networkx numpy scipy python-dotenv pyyaml
 COPY . .
 EXPOSE 8080
